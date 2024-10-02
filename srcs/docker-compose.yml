@@ -1,0 +1,190 @@
+# version: '3.8'
+name: inception
+
+services:
+  nginx:
+    image: nginx
+    container_name: nginx
+    pull_policy: never
+    build:
+      context: ./requirements/nginx/
+      args:
+        CRS_COUNTRYCODE: ${CRS_COUNTRYCODE}
+        CRS_STATE: ${CRS_STATE}
+        CRS_LOCATION: ${CRS_LOCATION}
+        CRS_ORGANIZATION: ${CRS_ORGANIZATION}
+        CRS_SECTION: ${CRS_SECTION}
+        CRS_COMMONNAME: ${CRS_COMMONNAME}
+        CRS_EMAIL: ${CRS_EMAIL}
+        CRS_PATH: ${CRS_PATH}
+    ports:
+      - "443:443"
+    env_file:
+      - .env
+    volumes:
+      - wp-volume:/var/www/abouramd
+      - adminer-volume:/usr/share/adminer/
+      - portfolio-volume:/var/www/portfolio
+    restart: unless-stopped
+    depends_on:
+      - wordpress
+      - adminer
+    networks:
+      - inception
+
+  wordpress:
+    image: wordpress
+    container_name: wordpress
+    pull_policy: never
+    build:
+      context: ./requirements/wordpress/
+      args:
+        DB_NAME: ${DB_NAME}
+        DB_USER: ${DB_USER}
+        DB_PASSWORD: ${DB_PASSWORD}
+        DB_HOST: mariadb
+        WP_URL: ${WP_URL}
+        REDIS_PASS: ${REDIS_PASS}
+      # no_cache: true
+    env_file:
+      - .env
+    volumes:
+      - wp-volume:/var/www/abouramd
+      # - adminer-volume:/var/www/adminer/
+    restart: unless-stopped
+    depends_on:
+      - mariadb
+      # - adminer
+      - redis
+      # - ftp-server
+    # init: true
+    networks:
+      - inception
+
+  mariadb:
+    image: mariadb
+    container_name: mariadb
+    pull_policy: never
+    build:
+      context: ./requirements/mariadb/
+      # no_cache: true
+      args:
+        DB_NAME: ${DB_NAME}
+        DB_USER: ${DB_USER}
+        DB_PASSWORD: ${DB_PASSWORD}
+        DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    env_file:
+      - .env
+    volumes:
+      - db-volume:/var/lib/mysql
+    restart: unless-stopped
+    networks:
+      - inception
+
+  adminer:
+    image: adminer
+    container_name: adminer
+    pull_policy: never
+    build:
+      context: ./requirements/bonus/adminer/
+    volumes:
+      - adminer-volume:/usr/share/adminer/
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - inception
+
+  ftp-server:
+    container_name: ftp-server
+    image: ftp-server
+    build:
+      context: ./requirements/bonus/ftp-server
+      args:
+        FTP_USER: ${FTP_USER}
+        FTP_PASS: ${FTP_PASS}
+    volumes:
+      - wp-volume:/home/${FTP_USER}/wp
+    env_file: .env
+    ports:
+      - "20:20"
+      - "21:21"
+    pull_policy: never
+    restart: unless-stopped
+    networks:
+      - inception
+
+  portfolio:
+    container_name: portfolio
+    image: portfolio
+    build:
+      context: ./requirements/bonus/portfolio
+    pull_policy: never
+    volumes:
+      - portfolio-volume:/portfolio
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - inception
+
+  code-server:
+    image: code-server
+    container_name: code-server
+    pull_policy: never
+    build:
+      context: ./requirements/bonus/code-server/
+      args:
+        CODE_PASS: ${CODE_PASS}
+    volumes:
+      - wp-volume:/proj/wordpress
+      - adminer-volume:/proj/adminer
+      - portfolio-volume:/proj/portfolio
+    ports:
+      - "3000:443"
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - inception
+
+  redis:
+    image: redis
+    container_name: redis
+    pull_policy: never
+    build:
+      context: ./requirements/bonus/redis/
+      args:
+        REDIS_PASS: ${REDIS_PASS}
+    env_file: .env
+    restart: unless-stopped
+    networks:
+      - inception
+
+
+networks:
+  inception:
+    name: inception
+
+
+
+volumes:
+  portfolio-volume:
+    name: portfolio
+
+  adminer-volume:
+    name: adminer
+
+  db-volume:
+    name: databases
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/data/db/
+
+  wp-volume:
+    name: wordpress
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/data/wordpress/
+
